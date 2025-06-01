@@ -1,71 +1,62 @@
-#' ssmodels: A package for fit the sample selection models.
+#' ssmodels: Sample Selection Models in R
 #'
-#' Package that provides models to fit data with sample selection bias problems. Includes:
+#' @description
+#' The \code{ssmodels} package provides functions to fit data affected by sample selection bias.
+#' It includes several extensions of the classical Heckman selection model, allowing for different
+#' assumptions about the joint distribution of the selection and outcome equations.
+#'
+#' @details
+#' The following models are implemented:
 #' \describe{
-#' \item{HeckmanCL(selectEq, outcomeEq, data = data, start)}{Heckman's classic model fit function. Sample selection
-#' usually arises in practice as a result of partial observability of the
-#' result of interest in a study. In the presence of sample selection, the
-#' observed data do not represent a random sample of the population, even
-#' after controlling for explanatory variables. That is, data is missing
-#' randomly. Thus, standard analysis using only complete cases will lead to
-#' biased results. Heckman introduced a sample selection model to analyze
-#' this data and proposed a complete likelihood estimation method under the
-#' assumption of normality. Such model was called Heckman model or Tobit 2
-#' model.}
-#' \item{HeckmantS(selectEq, outcomeEq, data = data, df, start)}{Heckman-t model adjustment function. The Heckman-t model
-#' maintains the original parametric structure of the Classic Heckman model,
-#' but considers a bivariate Student's t distribution as the underlying joint
-#' distribution of the selection and primary regression variable and estimates
-#' the parameters by maximum likelihood.}
-#' \item{HeckmanSK(selectEq, outcomeEq, data = data, lambda, start)}{Heckman-SK model adjustment function. The Heckman-sk
-#' model maintains the original parametric structure of the Classic Heckman
-#' model, but considers a bivariate Skew-Normal distribution as the underlying
-#' joint distribution of the selection and primary regression variable and
-#' estimates the parameters by maximum likelihood.}
-#' \item{HeckmanBS(selectEq, outcomeBS, data = data, start)}{Heckman-BS model adjustment function. The Heckman-BS model
-#' maintains the original parametric structure of the Classic Heckman model,
-#' but considers a bivariate Birnbaum-Saunders distribution as the underlying
-#' joint distribution of the selection and primary regression variable and
-#' estimates the parameters by maximum likelihood.}
-#' \item{HeckmanGe(selectEq, outcomeEq,outcomeS, outcomeC, data = data)}{Function for adjustment of Generalized Heckman model. The
-#' Generalized Heckman Model generalize the Classic Heckman model by adding
-#' covariables to the dispersion and correlation parameters, which allows to
-#' identify the covariates responsible for the presence of selection bias and
-#' the presence of heteroscedasticity.}
+#'   \item{\code{HeckmanCL}}{Classic Heckman model (Tobit-2).}
+#'   \item{\code{HeckmantS}}{Heckman model with Student's t-distribution.}
+#'   \item{\code{HeckmanSK}}{Heckman model with Skew-Normal distribution.}
+#'   \item{\code{HeckmanBS}}{Heckman model with Birnbaum-Saunders distribution.}
+#'   \item{\code{HeckmanGe}}{Generalized Heckman model with covariates in the dispersion
+#'   and correlation structures.}
 #' }
 #'
+#' The package also includes helper functions for computing Inverse Mills Ratios (IMR),
+#' post-processing parameter vectors, and two-step initial value estimation.
+#'
+#' @seealso \code{\link{HeckmanCL}}, \code{\link{HeckmantS}}, \code{\link{HeckmanSK}},
+#' \code{\link{HeckmanBS}}, \code{\link{HeckmanGe}}
+#'
+#' @references
+#' \insertRef{heckman1976common}{ssmodels}
+#'
+#' \insertRef{heckman1979sample}{ssmodels}
+#'
+#' \insertRef{mroz1987}{ssmodels}
+#'
+#' \insertRef{sampleSelection}{ssmodels}
+#'
+#' \insertRef{marchenko2012heckman}{ssmodels}
+#'
+#' \insertRef{ogundimu2016sample}{ssmodels}
+#'
+#' \insertRef{zhelonkin2016robust}{ssmodels}
+#'
+#' \insertRef{ssmrob}{ssmodels}
+#'
+#' \insertRef{ogundimu2019robust}{ssmodels}
+#'
+#' \insertRef{bastos}{ssmodels}
+#'
+#' \insertRef{bastosBarreto}{ssmodels}
+#'
+#' @author
+#' Fernando de Souza Bastos, Wagner Barreto de Souza
+#'
+#' @keywords sample selection Heckman maximum likelihood econometrics
 #' @importFrom stats binomial coef dnorm dt glm lm model.matrix model.response na.pass optim pnorm printCoefmat pt qnorm terms
 #' @importFrom utils tail
 #' @importFrom Rdpack reprompt
-#'
-#' @param selection Selection equation.
-#' @param outcome Primary Regression Equation.
-#' @param outcomeS Matrix with Covariables for fit of the Dispersion Parameter.
-#' @param outcomeC Matrix with Covariates for Adjusting the Correlation Parameter.
-#' @param df Initial value to the degree of freedom of Heckman-t model.
-#' @param lambda Initial value for asymmetry parameter.
-#' @param start initial values.
-#' @param data Database.
-#'
-#' @return Applying any package function returns a list of results
-#' that include estimates of the fit model parameters, hessian matrix,
-#' number of observations, and more. If the initial value is not included
-#' in the function argument, an initial value is estimated from the
-#' Heckman two-step method setting.
-#'
-#' @seealso \code{\link{HeckmanCL}}
-#' @seealso \code{\link{HeckmantS}}
-#' @seealso \code{\link{HeckmanSK}}
-#' @seealso \code{\link{HeckmanBS}}
-#' @seealso \code{\link{HeckmanGe}}
-#'
-#' @author Fernando de Souza Bastos, Wagner Barreto de Souza
-#'
-#' @keywords Heckman
-#'
-#' @docType package
 #' @name ssmodels
-NULL
+#' @docType package
+"_PACKAGE"
+
+
 
 #' Medical Expenditure Panel Survey
 #'
@@ -177,10 +168,11 @@ NULL
 #' # Wooldridge(2016): page 247
 #' data(Mroz87)
 #' attach(Mroz87)
-#' selectEq  <- lfp ~ nwifeinc + educ + exper + I(exper^2) + age + kids5 + kids618
-#' outcomeEq <- log(wage) ~ educ + exper + I(exper^2)
-#' outcomeS  <- cbind(educ, exper)
-#' outcomeC  <- cbind(educ, exper)
+#' Mroz87$lwage <- ifelse(Mroz87$wage>0,log(Mroz87$wage), NA)
+#' selectEq <- lfp ~ nwifeinc + educ + exper + I(exper^2) + age + kids5 + kids618
+#' outcomeEq <- lwage ~ educ + exper + I(exper^2)
+#' outcomeS <- cbind(educ, exper)
+#' outcomeC <- 1
 #' outcomeBS <- wage ~ educ + exper + I(exper^2)
 #' outcomeBS <- wage ~ educ + exper + I(exper^2)
 #' HeckmanCL(selectEq, outcomeEq, data = Mroz87)
@@ -282,7 +274,7 @@ NULL
 #'  \item{binexp: 1 if \code{meddol} > 0.}
 #'  }
 #'
-#' @source \url{http://cameron.econ.ucdavis.edu/mmabook/mmadata.html}
+#' @source \url{https://cameron.econ.ucdavis.edu/mmabook/mmadata.html}
 #'
 #' @references{
 #'   \insertRef{cameron2005}{ssmodels}
@@ -335,7 +327,7 @@ NULL
 #'   \item{lnw2: Log of real average hourly earnings}
 #'   \item{Lnw: Log of real average hourly earnings}
 #' }
-#' @source \url{http://simba.isr.umich.edu/}
+#' @source \url{https://simba.isr.umich.edu/}
 #'
 #' @references{
 #'   \insertRef{semykina2013estimation}{ssmodels}
@@ -415,10 +407,8 @@ NULL
 #'
 "nhanes"
 
-.onAttach <- function(libname, pkgname) {
-  packageStartupMessage("If you have questions, suggestions,
-  or comments regarding the 'ssmodels' package, please contact: fernando.bastos@ufv.br")
-}
+packageStartupMessage("If you have any questions, suggestions, or comments regarding the 'ssmodels' package, please contact: fernando.bastos@ufv.br")
+
 
 .onLoad <- function(lib, pkg){
    Rdpack::Rdpack_bibstyles(package = pkg, authors = "LongNames")

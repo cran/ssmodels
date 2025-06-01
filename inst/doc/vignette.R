@@ -1,4 +1,6 @@
 ## ----setup, include=FALSE-----------------------------------------------------
+library(ssmodels)
+library(ggplot2)
 require(knitr)
 require(kfigr)
 library(kableExtra)
@@ -6,224 +8,7 @@ options(knitr.table.format = "latex")
 knitr::opts_chunk$set(echo = TRUE, fig.align = "center", message=FALSE, 
                       warning=FALSE, fig.height=5, fig.width=7.2)
 
-## -----------------------------------------------------------------------------
-library("mvtnorm") #Pacote para geração dos dados
-set.seed(0) 
-#Parâmetros utilizados:
-sigma <- 2.9
-rho   <- -0.5
-n     <- 100
-gamma0<- 2.2
-gamma1<- -3
-beta0 <- -1
-beta1 <- 2.7
-#Covariáveis
-xs    <- runif(n)
-xo    <- runif(n)
-#Vetor de parâmetros
-b     <- rbind(beta0,beta1)
-g     <- rbind(gamma0,gamma1)
-mu1   <- (as.numeric(model.matrix(~xo) %*% b))
-mu2   <- (as.numeric(model.matrix(~xs) %*% g))
-#Simulação das variáveis bivariadas com distribuição normal
-eps   <- matrix(NA,n,2)
-for(k in 1:n){
-  eps[k,] <- mvtnorm::rmvnorm(1,
-                            c(mu1[k], mu2[k]),
-                            matrix(c(sigma, rho*sigma, rho*sigma, 1), 2, 2))
-}
-#eps <- rmvnorm(1000, c(0,0), matrix(c(sigma, rho*sigma, rho*sigma, 1), 2, 2))
-y1 <- cbind(eps[,1])
-y2 <- cbind(eps[,2])>0
-#Variável de seleção
-ys<-1*y2
-#Variável de interesse primário
-yo<-y1*ys
-
-## ---- message=FALSE-----------------------------------------------------------
-library(ssmodels)
-m0 <- HeckmanCL(ys~xs,yo~xo)
-summary(m0)
-library("sampleSelection")
-m1 <- selection(ys~xs, yo ~xo, method = "ml")
-summary(m1)
-
-## ----fig1, fig.align= "center", fig.width = 7.2, fig.height= 5, anchor="Figura"----
-opar <- par(mar=c(2,2,2,0) + 0.9, mgp=c(2,1,0))
-pch <- c(1, 16)
-plot(xo, y1, pch=pch[1 + ys], cex=0.5, lwd=0.5, main = "Figura 1: Ajuste dos modelos de Heckman Clássico e modelo linear \n simples a dados simulados com censura.")
-# True dependence
-abline(a=beta0, b=beta1, lty=1, lwd=2)
-# Heckman's model
-abline(a=coef(m0)[3], b=coef(m0)[4], lty=2, col="red", lwd=2)
-# linear model
-cf <- coef(lm(yo ~ xo, subset=ys==1))
-abline(a=cf[1], b=cf[2], lty=3, col="blue", lwd=3)
-par(opar)
-
-## -----------------------------------------------------------------------------
-library("mvtnorm")
-set.seed(0)
-gamma0 <- 0.5
-gamma1 <- -1
-beta0 <- -2
-beta1 <- 2
-lambda0 <- 0.1
-lambda1<- 0.5
-kappa0 <- 0.3
-kappa1 <- -0.5
-a <- rbind(lambda0,lambda1)
-b <- rbind(beta0,beta1)
-g <- rbind(gamma0,gamma1)
-d <- rbind(kappa0,kappa1)
-n <- 200
-xs <- rnorm(n)
-xo <- rnorm(n)
-mu1 <- (as.numeric(model.matrix(~xo) %*% b))
-mu2 <- (as.numeric(model.matrix(~xs) %*% g))
-sigma <- exp(as.numeric(model.matrix(~xo) %*% a))
-rho   <- tanh(as.numeric(model.matrix(~xo) %*% d))
-eps <- matrix(NA,n,2)
-for(k in 1:n){
-  eps[k,] <- mvtnorm::rmvnorm(1,c(mu1[k],mu2[k]),matrix(c((sigma[k])^2,rho[k]*sigma[k],rho[k]*sigma[k],1),2,2))
-}
-y1 <- cbind(eps[,1])
-y2 <- cbind(eps[,2])>0
-ys<-1*y2
-yo<-y1*ys
-
-## ---- warning=FALSE-----------------------------------------------------------
-m0 <- HeckmanCL(ys~1+xs, yo ~1+xo)
-summary(m0)
-m1 <- HeckmanGe(ys~xs, yo ~xo, cbind(xo), cbind(xo))
-summary(m1)
-
-## ----fig2, fig.align= "center", fig.width = 7.2, fig.height= 5, anchor="Figura"----
-opar <- par(mar=c(2,2,3,0) + 0.9, mgp=c(2,1,0))
-pch <- c(1, 16)
-plot(xo, y1, pch=pch[1 + ys], cex=0.5, lwd=0.3, ylim = c(-8,8), main = "Figura 2: Ajuste dos modelos de Heckman Generalizados e Clássico \n e modelo linear simples a dados simulados com censura.")
-# True dependence
-abline(a=beta0, b=beta1, lty=1, lwd=2)
-# Heckman's model
-abline(a=coef(m0)[3], b=coef(m0)[4], lty=2, col="blue", lwd=2)
-# linear model
-m2 <- coef(lm(y1 ~ xo, subset=ys==1))
-abline(a=m2[1], b=m2[2], lty=3, col="green", lwd=2)
-# Heckman Generalized
-abline(a=coef(m1)[3], b=coef(m1)[4], lty=5, col="red")
-par(opar)
-
-## ---- warning=FALSE-----------------------------------------------------------
-set.seed(0)
-n=200 #Tamanho das amostras
-#Valores iniciais dos parametros usados para gerar as variaveis. 
-#Ou seja, Valor verdadeiro dos parametros
-#Para manter 30% de censura, manter os seguintes parametros:
-gamma0 <- 1.6
-gamma1 <- 0.8
-gamma2 <- 0.2
-gamma3 <- 0.7
-beta0  <- 1
-beta1  <- 0.7
-beta2  <- 1.1
-phi1   <- 1.2
-phi2   <- 1
-rho    <- -0.5
-lambda <- 1
-nu <- 10
-#Matriz de covariaveis para gerar mu1
-X1 <- rep(1,n)
-X2 <- rnorm(n,0,1)
-X3 <- rnorm(n,0,1)
-X4 <- rnorm(n,0,1)
-XO <- cbind(X2,X3)
-#Matriz de covariaveis para gerar mu2, sem restriao de exclusao
-XS <- cbind(X2,X3,X4)
-#Vetor de valores verdadeiros dos parametros
-b <- rbind(beta0,beta1,beta2)
-g <- rbind(gamma0,gamma1,gamma2,gamma3)
-#Vetor de medias 1
-mu1 <- exp(as.numeric(model.matrix(~XO) %*% b))
-#Vetor de medias 2
-mu2 <- exp(as.numeric(model.matrix(~XS) %*% g))
-
-u1  <-rnorm(n)
-u2  <-rnorm(n)
-z1  <-(((sqrt(1+rho))+(sqrt(1-rho)))/2)*u1+(((sqrt(1+rho))-(sqrt(1-rho)))/2)*u2
-z2  <-(((sqrt(1+rho))-(sqrt(1-rho)))/2)*u1+(((sqrt(1+rho))+(sqrt(1-rho)))/2)*u2
-#################################################################
-#Variaveis (T1,T2)~BSB(mu1,phi1,mu2,1,rho)
-##########################################################
-T1<-(mu1/(1+(1/phi1)))*((1/2)*(sqrt(2/phi1))*z1+sqrt(1+((1/2)*(sqrt(2/phi1))*z1)^2))^2
-T2<-(mu2/(1+(1/phi2)))*((1/2)*(sqrt(2/phi2))*z2+sqrt(1+((1/2)*(sqrt(2/phi2))*z2)^2))^2
-################################################################
-#Variavel indicadora
-######################################
-YS<-1*(T2>1)
-#######################################################
-#Variavel de interesse cuja densidade eh obtida apartir da distribuicao
-#Birnbaum Saunders bivariada, observe que esta eh uma variavel com censura
-#e de acordo com a minha especificacao dos parametros a censura eh de
-#aproximadamente 30%.
-############################################################
-YO<-T1*YS
-
-## ---- warning = FALSE---------------------------------------------------------
-#Data frame com os dados simulados
-dt1=data.frame(YO,YS,XO,XS)
-names(dt1) <- c("YO","YS","XO1","XO2","XS1","XS2","XS3")
-selectionEq <- YS~XS1+XS2+XS3
-outcomeEq <- YO~XO1+XO2
-mBS <- HeckmanBS(selectionEq,outcomeEq, data=dt1)
-#Transformacao de y para ajuste dos demais modelos 
-l_YO <- ifelse(YS==1,log(YO),0)
-#Variavel resposta para ajuste dos demais modelos
-dt2=data.frame(l_YO,YS,XO,XS)
-names(dt2) <- c("l_YO","YS","XO1","XO2","XS1","XS2","XS3")
-selection <- YS~XS1+XS2+XS3
-outcome <- l_YO~XO1+XO2
-mCL <- HeckmanCL(selection, outcome, data=dt2)
-mtS <- HeckmantS(selection, outcome, data=dt2, nu)
-mSK <- HeckmanSK(selection, outcome, data=dt2, lambda)
-
-## ----fig3, fig.align= "center", fig.width = 7.2, fig.height= 5, anchor="Figura"----
-opar <- par(mar=c(2,2,3,0) + 0.9, mgp=c(2,1,0))
-library("ggplot2")
-library("gridExtra")
-barfill <- "grey"
-barlines <- "black"
-p1 <- ggplot(dt1, aes(YO)) + geom_histogram(aes(y = ..density..), bins=10, colour = barlines, fill = barfill)+
-  scale_x_continuous(name = "(a) Values of the variable of interest")
-  #                    breaks = seq(0, 125, 25),
-  #                    limits=c(0, 125))+
-  # scale_y_continuous(name = "Count",
-  #                    breaks = seq(0, 0.01, 0.005),
-  #                    limits=c(0,  0.01))
-p2 <- ggplot(dt2, aes(l_YO)) + geom_histogram(aes(y = ..density..), bins=10, colour = barlines, fill = barfill) + scale_x_continuous(name = "(b) Log of values of variable of interest", limits=c(-5, 5))
-  #                    breaks = seq(-5, 5, 1),
-  #                    limits=c(-5, 5))+
-  # scale_y_continuous(name = "Count",
-  #                    breaks = seq(0, 1, 0.2),
-  #                    limits=c(0, 1))
-grid.arrange(p1, p2, ncol=2)
-
-## -----------------------------------------------------------------------------
-Parameters <- c("$\\gamma_{0}$", "$\\gamma_{1}$", "$\\gamma_{2}$", "$\\gamma_{3}$", "$\\beta_{0}$", "$\\beta_{1}$", "$\\beta_{2}$", "$\\phi$", "$\\rho$", "$\\lambda$", "$\\nu$")
-truevalue <- c(gamma0, gamma1, gamma2, gamma3, beta0, beta1, beta2, phi1, rho, lambda, nu)
-HBS <- round(mBS$coefficients, digits = 3)
-HCL <- round(mCL$coefficients, digits = 3)
-HSK <- round(mSK$coefficients, digits = 3)
-HtS <- round(mtS$coefficients, digits = 3)
-Results <- data.frame("Parameters"= Parameters,
-                      "truevalue" = truevalue,
-                      "HeckmanBS" = c(HBS, "NA", "NA"), 
-                      "HeckmanCL" = c(HCL, "NA", "NA"),
-                      "HeckmantS" = c(HtS[1:9], "NA", HtS[10]),
-                      "HeckmanSK" = c(HSK[1:9], HSK[10], "NA"))
-kable(Results, format = "html", align = c("c", "c", "c", "c", "c"))
-#kable_styling(, bootstrap_options = c("striped", "hover", "condensed", "responsive"), full_width = TRUE)
-
-## ----fig4, fig.align= "center", fig.width = 7.2, fig.height= 5, anchor="Figura"----
+## ----fig4, fig.align= "center", fig.width = 7.2, fig.height= 5, anchor="Figura", fig.alt= "Log of Expenditures Medical"----
 library(ssmodels)
 #Leitura do dados MEPS2001
 data(MEPS2001)
@@ -245,9 +30,9 @@ p2 <- ggplot(MEPS2001,aes(lambexp))+geom_histogram(colour = barlines, fill = bar
   scale_y_continuous(name = "Count",
                      breaks = seq(0, 300, 100),
                      limits=c(0, 300))
-grid.arrange(p1, p2, ncol=2)
+gridExtra::grid.arrange(p1, p2, ncol=2)
 
-## ---- warning=FALSE-----------------------------------------------------------
+## ----warning=FALSE------------------------------------------------------------
 selectEq <- dambexp ~ age + female + educ + blhisp + totchr + ins + income
 outcomeEq <- lnambx ~ age + female + educ + blhisp + totchr + ins 
 outcomeS <- cbind(age,female,totchr,ins)
@@ -273,22 +58,22 @@ Results <- data.frame("Parameters"= Parameters,
                       "HeckmanSK" = c(HSK[1:16], "NA", "NA", "NA", "NA", HSK[17], "NA", HSK[18]))
 kable(Results, format = "html", align = c("c", "c", "c", "c", "c"))
 
-## ---- warning=FALSE-----------------------------------------------------------
+## ----warning=FALSE------------------------------------------------------------
 summary(mCL)
 
-## ---- warning=FALSE-----------------------------------------------------------
+## ----warning=FALSE------------------------------------------------------------
 summary(mGe)
 
-## ---- warning=FALSE-----------------------------------------------------------
+## ----warning=FALSE------------------------------------------------------------
 summary(mBS)
 
-## ---- warning=FALSE-----------------------------------------------------------
+## ----warning=FALSE------------------------------------------------------------
 summary(mtS)
 
-## ---- warning=FALSE-----------------------------------------------------------
+## ----warning=FALSE------------------------------------------------------------
 summary(mSK)
 
-## ---- warning=FALSE-----------------------------------------------------------
+## ----warning=FALSE------------------------------------------------------------
 library(ssmodels)
 data(nhanes)
 attach(nhanes)
@@ -322,8 +107,7 @@ Percentage1 <- c(perc11, perc12, perc13, perc14, perc15, perc16, perc17, nObs1)
 table <- data.frame("Variables" = Variables, "Percentage of Missing"= Percentage, "Without Missing"= Percentage1)
 kable(table, format = "html", align = c("c", "c", "c"))
 
-## ---- warning=FALSE-----------------------------------------------------------
-library("ggplot2")
+## ----warning=FALSE, fig.alt="Log Systolic blood pressure"---------------------
 library("gridExtra")
 barfill <- "grey"
 barlines <- "black"
@@ -336,7 +120,7 @@ p2 <- ggplot(df, aes(log(sbp))) + geom_histogram( colour = barlines, fill = barf
   scale_x_continuous(name = "Log Systolic blood pressure")
 grid.arrange(p1, p2, ncol=2)
 
-## ---- warning = FALSE---------------------------------------------------------
+## ----warning = FALSE----------------------------------------------------------
 df$YS <- ifelse(is.na(df$Income),0,1)
 df$educ <- ifelse(df$educ<=2,0,1)
 df$Income <- ifelse(is.na(df$Income),0,df$Income)
@@ -361,15 +145,15 @@ Results <- data.frame("Parameters"= Parameters,
                       "HeckmanSK" = c(HSK[1:13], "NA", HSK[14]))
 kable(Results, format = "html", align = c("c", "c", "c", "c", "c"))
 
-## ---- warning = FALSE---------------------------------------------------------
+## ----warning = FALSE----------------------------------------------------------
 summary(mCL)
 
-## ---- warning = FALSE---------------------------------------------------------
+## ----warning = FALSE----------------------------------------------------------
 summary(mtS)
 
-## ---- warning = FALSE---------------------------------------------------------
+## ----warning = FALSE----------------------------------------------------------
 summary(mBS)
 
-## ---- warning = FALSE---------------------------------------------------------
+## ----warning = FALSE----------------------------------------------------------
 summary(mSK)
 

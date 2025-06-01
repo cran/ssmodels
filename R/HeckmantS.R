@@ -1,290 +1,269 @@
-#' Heckman-t Model fit Function
+#' Heckman-t Model Fit Function
 #'
 #' @description
-#' Estimates the parameters of the Heckman-t model
-#'
-#' @return
-#'
-#' Returns a list with the following components.
-#'
-#' Coefficients: Returns a numerical vector with the best estimated values
-#' of the model parameters;
-#'
-#' Value: The value of function to be minimized (or maximized) corresponding
-#' to par.
-#'
-#' loglik: Negative of value. Minimum (or maximum) of the likelihood function
-#' calculated from the estimated coefficients.
-#'
-#' counts: Component of the Optim function. A two-element integer vector
-#' giving the number of calls to fn and gr respectively. This excludes
-#' those calls needed to compute the Hessian, if requested, and any calls
-#' to fn to compute a finite-difference approximation to the gradient.
-#'
-#' hessian: Component of the Optim function, with pre-defined option
-#' hessian=TRUE. A symmetric matrix giving an estimate of the Hessian
-#' at the solution found. Note that this is the Hessian of the unconstrained
-#' problem even if the box constraints are active.
-#'
-#' fisher_infotS: Fisher information matrix
-#'
-#' prop_sigmatS: Square root of the Fisher information matrix diagonal
-#'
-#' level: Selection variable levels
-#'
-#' nObs: Numeric value representing the size of the database
-#'
-#' nParam: Numerical value representing the number of model parameters
-#'
-#' N0: Numerical value representing the number of unobserved entries
-#'
-#' N1: Numerical value representing the number of complete entries
-#'
-#' NXS: Numerical value representing the number of parameters of the
-#' selection model
-#'
-#' NXO: Numerical value representing the number of parameters of the
-#' regression model
-#'
-#' df: Numerical value that represents the difference between the size
-#' of the response vector of the selection equation and the number of
-#' model parameters
-#'
-#' aic: Numerical value representing Akaike's information criterion.
-#'
-#' bic: Numerical value representing Schwarz's Bayesian Criterion
-#'
-#' initial.value: Numerical vector that represents the input values
-#' (Initial Values) used in the parameter estimation.
+#' Fits a sample selection model based on the Student's t-distribution,
+#' extending the classical Heckman model to account for heavy-tailed error terms.
+#' The estimation is performed via Maximum Likelihood using the BFGS algorithm.
 #'
 #' @details
-#' The HeckmantS() function fits the Sample Selection Model
-#' based on the Student's t distribution. For more information see
-#' \insertCite{marchenko2012heckman;textual}{ssmodels}
+#' The function implements the Heckman sample selection model using
+#' the Student's t-distribution for the error terms, as proposed by
+#' \insertCite{marchenko2012heckman;textual}{ssmodels}. This extension
+#' allows for robustness against outliers and heavy-tailed distributions.
+#' Initial parameter values can be specified by the user or default to standard starting values.
 #'
+#' @param selection A formula specifying the selection equation.
+#' @param outcome A formula specifying the outcome equation.
+#' @param df Initial value for the degrees of freedom parameter of the t-distribution.
+#' @param start Optional numeric vector of initial parameter values.
+#' @param data A data frame containing the variables in the model.
 #'
-#' @param selection Selection equation.
-#' @param outcome Primary Regression Equation.
-#' @param df Initial start to the degree of freedom.
-#' @param start initial values.
-#' @param data Database.
+#' @return A list containing:
+#' \itemize{
+#'   \item \code{coefficients}: Named vector of estimated model parameters.
+#'   \item \code{value}: Negative of the maximum log-likelihood.
+#'   \item \code{loglik}: Maximum log-likelihood.
+#'   \item \code{counts}: Number of gradient evaluations performed.
+#'   \item \code{hessian}: Hessian matrix at the optimum.
+#'   \item \code{fisher_infotS}: Approximate Fisher information matrix.
+#'   \item \code{prop_sigmatS}: Standard errors for the parameter estimates.
+#'   \item \code{level}: Levels of the selection variable.
+#'   \item \code{nObs}: Number of observations.
+#'   \item \code{nParam}: Number of model parameters.
+#'   \item \code{N0}: Number of censored (unobserved) observations.
+#'   \item \code{N1}: Number of uncensored (observed) observations.
+#'   \item \code{NXS}: Number of parameters in the selection equation.
+#'   \item \code{NXO}: Number of parameters in the outcome equation.
+#'   \item \code{df}: Degrees of freedom (observations minus parameters).
+#'   \item \code{aic}: Akaike Information Criterion.
+#'   \item \code{bic}: Bayesian Information Criterion.
+#'   \item \code{initial.value}: Initial parameter values used in the optimization.
+#' }
+#'
 #' @examples
 #' data(MEPS2001)
 #' attach(MEPS2001)
 #' selectEq <- dambexp ~ age + female + educ + blhisp + totchr + ins + income
 #' outcomeEq <- lnambx ~ age + female + educ + blhisp + totchr + ins
-#' HeckmantS(selectEq, outcomeEq, data = MEPS2001, df=12)
+#' HeckmantS(selectEq, outcomeEq, data = MEPS2001, df = 12)
+#'
+#' @references
+#' \insertRef{marchenko2012heckman}{ssmodels}
+#'
 #' @importFrom Rdpack reprompt
-#' @references {
-#' \insertAllCited{}
-#' }
-#' @export HeckmantS
 #' @export
 HeckmantS <- function(selection, outcome, data = sys.frame(sys.parent()), df, start = NULL) {
-    ##############################################################################
-    # Extract model matrix and matrix from selection and regression equations
-    ##############################################################################
-    mf <- match.call(expand.dots = FALSE)
-    m <- match(c("selection", "data", "subset"), names(mf), 0)
-    mfS <- mf[c(1, m)]
-    mfS$drop.unused.levels <- TRUE
-    mfS$na.action <- na.pass
-    mfS[[1]] <- as.name("model.frame")
-    names(mfS)[2] <- "formula"
-    # model.frame requires the parameter to be 'formula'
-    mfS <- eval(mfS, parent.frame())
-    mtS <- terms(mfS)
-    XS <- model.matrix(mtS, mfS)
-    NXS <- ncol(XS)
-    YS <- model.response(mfS)
-    YSLevels <- levels(as.factor(YS))
-    ################# Regression Matrix #
-    m <- match(c("outcome", "data", "subset", "weights", "offset"), names(mf), 0)
-    mfO <- mf[c(1, m)]
-    mfO$na.action <- na.pass
-    mfO$drop.unused.levels <- TRUE
-    mfO$na.action <- na.pass
-    mfO[[1]] <- as.name("model.frame")
-    names(mfO)[2] <- "formula"
-    mfO <- eval(mfO, parent.frame())
-    mtO <- attr(mfO, "terms")
-    XO <- model.matrix(mtO, mfO)
-    NXO <- ncol(XO)
-    YO <- model.response(mfO)
+  # Step 1: Extract components from selection and outcome formulas
+  components <- extract_model_components(selection = selection, outcome = outcome, data = data)
+  XS  <- components$XS
+  YS  <- components$YS
+  NXS <- components$NXS
+  XO  <- components$XO
+  YO  <- components$YO
+  NXO <- components$NXO
+  YSLevels <- components$YSLevels
 
-    ################### Likelihood #
-    loglik_tS <- function(start) {
-        NXS <- dim(model.matrix(~XS))[2] - 1  #Numero de colunas de XS+1
-        NXO <- dim(model.matrix(~XO))[2] - 1  #Numero de colunas de XO+1
-        ## parameter indices
-        istartS <- 1:NXS
-        istartO <- seq(tail(istartS, 1) + 1, length = NXO)
-        isigma <- tail(istartO, 1) + 1
-        irho <- tail(isigma, 1) + 1
-        iv <- tail(irho, 1) + 1
-        g <- start[istartS]
-        b <- start[istartO]
-        sigma <- start[isigma]
-        if (sigma < 0)
-            return(NA)
-        rho <- start[irho]
-        if ((rho < -1) || (rho > 1))
-            return(NA)
-        v <- start[iv]
-        XS.g <- (XS) %*% g
-        XO.b <- (XO) %*% b
-        u2 <- YO - XO.b
-        z <- u2/sigma
-        r <- sqrt(1 - rho^2)
-        Q <- ((v + 1)/(v + (z^2)))^(1/2)
-        eta <- Q * ((rho * z + XS.g)/r)
-        gam <- log(gamma((v + 1)/2)) - log(gamma(v/2)) - 0.5 * log(pi) - 0.5 * log(v) -
-            log(sigma)
-        ll <- ifelse(YS == 0, (pt(-XS.g, v, log.p = TRUE)), (gam - ((v + 1)/2) *
-            log(1 + ((z^2)/v)) + pt(eta, v + 1, log.p = TRUE)))
-        return(sum(ll))
-    }
-    ############## Gradient #
-    gradlik_tS <- function(start) {
-        NXS <- dim(model.matrix(~XS))[2] - 1  #Numero de colunas de XS+1
-        NXO <- dim(model.matrix(~XO))[2] - 1  #Numero de colunas de XO+1
-        nObs <- length(YS)
-        NO <- length(YS[YS > 0])
-        nParam <- NXS + NXO + 3  #Total of parameters
-        N0 <- sum(YS == 0)
-        N1 <- sum(YS == 1)
+  # Step 2: Define the log-likelihood function for the Heckman-t model
+  ################### Likelihood #
+  loglik_tS <- function(start) {
 
-        w <- rep(1, N0 + N1)
-        w0 <- rep(1, N0)
-        w1 <- rep(1, N1)
+    # Parameter indices
+    istartS <- 1:NXS
+    istartO <- seq(tail(istartS, 1) + 1, length = NXO)
+    isigma  <- tail(istartO, 1) + 1
+    irho    <- tail(isigma, 1) + 1
+    iv      <- tail(irho, 1) + 1
+    nParam  <- iv
+    # Extract parameters
+    g <- start[istartS]
+    b <- start[istartO]
+    sigma <- start[isigma]
 
-        ## parameter indices
-        istartS <- 1:NXS
-        istartO <- seq(tail(istartS, 1) + 1, length = NXO)
-        isigma <- tail(istartO, 1) + 1
-        irho <- tail(isigma, 1) + 1
-        iv <- tail(irho, 1) + 1
-        g <- start[istartS]
-        b <- start[istartO]
 
-        chuteS = start[isigma]
-        lns = log(chuteS)
-        sigma = exp(lns)
-        chuteR <- start[irho]
-        tau = log((1 + chuteR)/(1 - chuteR))/2
-        rho = (exp(2 * tau) - 1)/(exp(2 * tau) + 1)
-        chuteV = start[iv]
-        lndf = log(chuteV)
-        v = exp(lndf)
+    rho <- start[irho]
 
-        XS0 <- XS[YS == 0, , drop = FALSE]
-        XS1 <- XS[YS == 1, , drop = FALSE]
-        YO[is.na(YO)] <- 0
-        YO1 <- YO[YS == 1]
-        XO1 <- XO[YS == 1, , drop = FALSE]
-        XS0.g <- as.numeric((XS0) %*% g)
-        XS1.g <- as.numeric((XS1) %*% g)
-        XO1.b <- as.numeric((XO1) %*% b)
-        # u2 <- YO1 - XO1.b u2S1 <- YO1 - XS1.g
-        u2O <- YO1 - XO1.b
-        # u2 <- YO - XO.b
-        z0 <- u2O/sigma
-        r <- sqrt(1 - rho^2)
-        Qv <- ((v + 1)/(v + (z0)^2))^(1/2)
-        Ar <- 1/sqrt(1 - (rho^2))
-        Arr <- rho * Ar
-        QSI <- (Arr * z0) + Ar * XS1.g
-        eta <- Qv * QSI
-        dr = 4 * exp(2 * tau)/((exp(2 * tau) + 1)^2)
+    # Check parameter validity
+    if (!is.finite(sigma) || sigma <= 0) return(NA)
+    if (!is.finite(rho) || abs(rho) >= 1) return(NA)
 
-        # tau <- XS1.g/r myenv <- new.env() assign('v', v, envir = myenv)
-        # #assign('XS0.g',XS0.g,envir = myenv) gv2 <-numericDeriv(quote(pt(-XS0.g,
-        # v,log.p=TRUE)), c('v'), myenv)
 
-        f1 <- function(x) {
-            ff <- pt(-XS0.g, x, log.p = TRUE)
-            return(ff)
-        }
+    nu <- start[iv]
 
-        gv2 <- numDeriv::grad(f1, rep(1, length(XS0.g)) * v)
-        # sum(gv2) myenv2 <- new.env() assign('v', v, envir = myenv2) assign( 'z0',z0,
-        # envir = myenv2) assign( 'QSI',QSI, envir = myenv2) f <-
-        # quote(pt((((v+1)/(v+(z0)^2))^(1/2))*QSI,v+1,log.p=TRUE)) gv <- numericDeriv(f,
-        # c('v'), myenv2)
+    # Linear predictors
+    XS.g <- (XS) %*% g
+    XO.b <- (XO) %*% b
 
-        f2 <- function(x) {
-            teste = (((x + 1)/(x + (z0)^2))^(1/2)) * QSI
-            ff <- pt(teste, (x + 1), log.p = TRUE)
-            return(ff)
-        }
+    # Residuals
+    u2 <- YO - XO.b
+    z <- u2 / sigma
+    r <- sqrt(1 - rho^2)
 
-        gv <- numDeriv::grad(f2, rep(1, length(z0)) * v)
+    # Scaling factor for eta
+    Q <- ((nu + 1) / (nu + (z^2)))^(1/2)
 
-        gradient <- matrix(0, nObs, nParam)
-        gradient[YS == 0, istartS] <- -w0 * (XS0) * (dt(-XS0.g, v)/pt(-XS0.g, v))
-        gradient[YS == 1, istartS] <- w1 * (XS1) * Ar * Qv * (dt(eta, v + 1)/pt(eta,
-            v + 1))
-        gradient[YS == 1, istartO] <- w1 * (XO1) * (Qv/sigma) * ((Qv * z0) + (((QSI *
-            ((v + (z0^2))^(-1))) * z0 - Arr) * (dt(eta, v + 1)/pt(eta, v + 1))))
-        gradient[YS == 1, isigma] <- w1 * (-1 + (Qv * z0)^2 + (dt(eta, v + 1)/pt(eta,
-            v + 1)) * ((Qv * (z0)) * (QSI * ((v + (z0^2))^(-1)) * (z0) - Arr)))
-        gradient[YS == 1, irho] <- w1 * (dt(eta, v + 1)/pt(eta, v + 1)) * Qv * (Ar^(3)) *
-            (z0 + rho * XS1.g) * dr
-        # gradient[YS == 1, iv] <- w1 *
-        # (((1/2)*v*(digamma((v+1)/2)-digamma(v/2))-(1/2))-((1/2)*v*log(1+((z0^2)/v)))+
-        # (((Qv*(z0))^(2))/(2))+v*gv) gradient[YS == 0, iv] <- w0*v*gv2
-        # colSums(gradient)
-        gradient[YS == 1, iv] <- w1 * ((((1/2) * digamma((v + 1)/2) - (1/2) * digamma(v/2)) -
-            (1/(2 * v))) - ((1/2) * log(1 + ((z0^2)/v))) + (((Qv * (z0))^(2))/(2 *
-            v)) + gv)
-        gradient[YS == 0, iv] <- w0 * gv2
-        return(colSums(gradient))
+    # Latent variable for observed data
+    eta <- Q * ((rho * z + XS.g) / r)
+
+    # Constant term for log-likelihood
+    gam <- log(gamma((nu + 1)/2)) - log(gamma(nu/2)) - 0.5 * log(pi) - 0.5 * log(nu) - log(sigma)
+
+    # Log-likelihood contributions
+    ll <- ifelse(YS == 0,
+                 pt(-XS.g, nu, log.p = TRUE),
+                 (gam - ((nu + 1)/2) * log(1 + ((z^2)/nu)) + pt(eta, nu + 1, log.p = TRUE)))
+
+    # Return total log-likelihood
+    return(sum(ll))
+  }
+
+  ############## Gradient #
+  gradlik_tS <- function(start) {
+
+    nObs <- length(YS)
+    NO <- length(YS[YS > 0])
+    nParam <- NXS + NXO + 3  # Total number of parameters
+    N0 <- sum(YS == 0)
+    N1 <- sum(YS == 1)
+
+    # Weight vectors
+    w  <- rep(1, N0 + N1)
+    w0 <- rep(1, N0)
+    w1 <- rep(1, N1)
+
+    # Parameter indices
+    istartS <- 1:NXS
+    istartO <- seq(tail(istartS, 1) + 1, length = NXO)
+    isigma  <- tail(istartO, 1) + 1
+    irho    <- tail(isigma, 1) + 1
+    iv      <- tail(irho, 1) + 1
+    nParam  <- iv
+    # Extract parameters and transformations
+    g <- start[istartS]
+    b <- start[istartO]
+
+    chuteS <- start[isigma]
+    lns <- log(chuteS)
+    sigma <- exp(lns)
+
+    chuteR <- start[irho]
+    tau <- log((1 + chuteR) / (1 - chuteR)) / 2
+    rho <- (exp(2 * tau) - 1) / (exp(2 * tau) + 1)
+    # Check parameter validity
+    if (!is.finite(sigma) || sigma <= 0) return(NA)
+    if (!is.finite(rho) || abs(rho) >= 1) return(NA)
+
+
+    chuteV <- start[iv]
+    lndf <- log(chuteV)
+    nu <- exp(lndf)
+
+    # Data subsets
+    XS0 <- XS[YS == 0, , drop = FALSE]
+    XS1 <- XS[YS == 1, , drop = FALSE]
+    YO[is.na(YO)] <- 0
+    YO1 <- YO[YS == 1]
+    XO1 <- XO[YS == 1, , drop = FALSE]
+
+    # Linear predictors
+    XS0.g <- as.numeric((XS0) %*% g)
+    XS1.g <- as.numeric((XS1) %*% g)
+    XO1.b <- as.numeric((XO1) %*% b)
+
+    # Residuals for observed data
+    u2O <- YO1 - XO1.b
+    z0 <- u2O / sigma
+    r <- sqrt(1 - rho^2)
+
+    # Scaling factors and transformations
+    Qv <- ((nu + 1) / (nu + (z0)^2))^(1/2)
+    Ar <- 1 / sqrt(1 - (rho^2))
+    Arr <- rho * Ar
+    QSI <- (Arr * z0) + Ar * XS1.g
+    eta <- Qv * QSI
+    dr <- 4 * exp(2 * tau) / ((exp(2 * tau) + 1)^2)
+
+    # Numerical derivatives for nu (censored and observed)
+    f1 <- function(x) {
+      ff <- pt(-XS0.g, x, log.p = TRUE)
+      return(ff)
     }
 
-    ####### Start#
-    if (is.null(start))
-    start <- c(step2(YS, XS, YO, XO), df)
-    #### Optim function#
-    theta_tS <- optim(start, loglik_tS, gradlik_tS, method = "BFGS", hessian = T,
-        control = list(fnscale = -1))
-    ########### Results #
-    names(theta_tS$par) <- c(colnames(XS), colnames(XO), "sigma", "rho", "df")
-    a   <- start
-    a1  <- theta_tS$par
-    a2  <- theta_tS$value
-    a3  <- theta_tS$counts[2]
-    a4  <- theta_tS$hessian
-    a5  <- solve(-a4)
-    a6  <- sqrt(diag(a5))
-    a7  <- YSLevels
-    a8  <- length(YS)
-    a9  <- length(start)
-    a10 <- sum(YS == 0)
-    a11 <- sum(YS == 1)
-    a12 <- ncol(XS)
-    a13 <- ncol(XO)
-    a14 <- (a8-a9)
-    a15 <- -2*a2 + 2*a9
-    a16 <- -2*a2 + a9*log(a8)
-    cl <- class(theta_tS)
-    result <- list(coefficients=a1,
-        value         =  a2,
-        loglik        = -a2,
-        counts        =  a3,
-        hessian       =  a4,
-        fisher_infotS =  a5,
-        prop_sigmatS  =  a6,
-        level         =  a7,
-        nObs          =  a8,
-        nParam        =  a9,
-        N0            = a10,
-        N1            = a11,
-        NXS           = a12,
-        NXO           = a13,
-        df            = a14,
-        aic           = a15,
-        bic           = a16,
-        initial.value = a)
-    class(result) <- c("HeckmantS", cl)
-    result
+    gv2 <- numDeriv::grad(f1, rep(1, length(XS0.g)) * nu)
+
+    f2 <- function(x) {
+      teste <- (((x + 1)/(x + (z0)^2))^(1/2)) * QSI
+      ff <- pt(teste, (x + 1), log.p = TRUE)
+      return(ff)
+    }
+
+    gv <- numDeriv::grad(f2, rep(1, length(z0)) * nu)
+
+    # Auxiliary terms for gradient calculation
+    M_eta <- dt(eta, nu + 1) / pt(eta, nu + 1)
+    term1 <- Qv * z0
+    term2 <- (QSI / (nu + z0^2)) * z0 - Arr
+
+    # Initialize gradient matrix
+    gradient <- matrix(0, nObs, nParam)
+
+    # Gradient for selection parameters
+    gradient[YS == 0, istartS] <- -w0 * (XS0) * (dt(-XS0.g, nu)/pt(-XS0.g, nu))
+    gradient[YS == 1, istartS] <- w1 * (XS1) * Ar * Qv * (dt(eta, nu + 1)/pt(eta, nu + 1))
+
+    # Gradient for outcome parameters
+    gradient[YS == 1, istartO] <- w1 * (XO1) * (Qv/sigma) * ((Qv * z0) + (((QSI *
+                                                                              ((nu + (z0^2))^(-1))) * z0 - Arr) * (dt(eta, nu + 1)/pt(eta, nu + 1))))
+
+    # Gradient for sigma
+    gradient[YS == 1, isigma] <- w1 * (-1 + (Qv * z0)^2 + M_eta * term1 * term2) / sigma
+
+    # Gradient for rho
+    gradient[YS == 1, irho] <- w1 * Qv * (z0 + rho * XS1.g) * (Ar^3) * M_eta
+
+    # Gradient for nu (observed and censored)
+    gradient[YS == 1, iv] <- w1 * ((((1/2) * digamma((nu + 1)/2) - (1/2) * digamma(nu/2)) -
+                                      (1/(2 * nu))) - ((1/2) * log(1 + ((z0^2)/nu))) + (((Qv * (z0))^(2)) / (2 * nu)) + gv)
+    gradient[YS == 0, iv] <- w0 * gv2
+
+    # Return the sum of gradient contributions
+    return(colSums(gradient))
+  }
+
+  # Step 4: Define initial values if not provided
+  if (is.null(start)) {
+    message("Start not provided using default start values.")
+    start <- c(rep(0, NXS + NXO), 1, 0, log(df))
+  }
+
+  # Step 5: Maximize the log-likelihood using BFGS optimization
+  theta_tS <- optim(start, loglik_tS, gradlik_tS, method = "BFGS", hessian = T,
+                    control = list(fnscale = -1))
+
+  # Step 6: Assign names to estimated parameters
+  names(theta_tS$par) <- c(colnames(XS), colnames(XO), "sigma", "rho", "df")
+
+  # Step 7: Construct output list with all relevant model components
+  result <- list(
+    coefficients    = theta_tS$par,              # Estimated coefficients
+    value           = theta_tS$value,            # Optim objective function value
+    loglik          = -theta_tS$value,           # Log-likelihood
+    counts          = theta_tS$counts[2],        # Number of iterations
+    hessian         = theta_tS$hessian,          # Hessian matrix
+    fisher_infotS   = solve(-theta_tS$hessian),  # Fisher Information Matrix
+    prop_sigmatS    = sqrt(diag(solve(-theta_tS$hessian))), # Standard errors
+    level           = YSLevels,                  # Selection levels
+    nObs            = length(YS),                # Number of observations
+    nParam          = length(start),             # Number of parameters
+    N0              = sum(YS == 0),              # Number of censored obs
+    N1              = sum(YS == 1),              # Number of uncensored obs
+    NXS             = NXS,                       # Number of selection regressors
+    NXO             = NXO,                       # Number of outcome regressors
+    df              = length(YS) - length(start),# Degrees of freedom
+    aic             = -2 * theta_tS$value + 2 * length(start), # AIC
+    bic             = -2 * theta_tS$value + length(start) * log(length(YS)), # BIC
+    initial.value   = start                      # Initial values used
+  )
+  class(result) <- c("HeckmantS", class(theta_tS))
+  return(result)
 }
+
