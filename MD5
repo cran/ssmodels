@@ -1,12 +1,12 @@
-7a9f54dfa3bb35979065784f1d37019e *DESCRIPTION
+fef4873962b425829232ff8beee60db7 *DESCRIPTION
 c6bf99ac0877297df3a29360ed851401 *NAMESPACE
-8d1e927940ee0b6695cb701016db0408 *NEWS.md
+c55848dc60d0c9d92bc4d85d6fefa4a9 *NEWS.md
 b483d84bc7e4d759d130e98096ca27e5 *R/HCinitial.R
-d93456aaee12549fc8df219afdfa92d9 *R/HeckmanBS.R
-cc5f0f2b56ce1f132ac4871d8bb695dd *R/HeckmanCL.R
-92b219e0c83e64282009e434c7fd52fb *R/HeckmanGe.R
-f1fc484f1d20adf97ebdd6fd5a2afd7a *R/HeckmanSK.R
-9b91563a35c05e3eb4e813591a13a591 *R/HeckmantS.R
+27aa10bad45665c353d32a0df669d01a *R/HeckmanBS.R
+95a98370ec8477fc6ceaed57bf129628 *R/HeckmanCL.R
+2d67e5c0d8b3f62a537ee0c6d640e358 *R/HeckmanGe.R
+2f41df76f6988844598f96c641f94ae7 *R/HeckmanSK.R
+7900ae90967e95342e84ded7c9f743a5 *R/HeckmantS.R
 3b8e7d8ed5f86e4c2e3439ab8c62204a *R/IMR.R
 63579d1ff2970af2af29fbad5668968f *R/data.R
 3bb653d1ed2713bf1650b65e122498a4 *R/extract_model_components.R
@@ -19,7 +19,7 @@ e4eb0dd6a2932db535ff08ae0d647e4d *R/summary.HeckmanGe.R
 abe64df4bd6b68d3e04f93689db4cca1 *R/summary.HeckmantS.R
 b23aa603f765604ffd26692c84d62a27 *R/twostep.R
 f754642687c86ebc983d3248e39c1baf *README.md
-0d5cc4deefeb5cd7217958ff3cd5758b *build/partial.rdb
+3ea90c3392431b887c026d89b4db90d5 *build/partial.rdb
 e57377941aaac87789e5270ec4641cd2 *build/vignette.rds
 7e308d7ea7bf892924a5a4c6e83aff0e *data/MEPS2001.rda
 ab9058c971827867fc85cbed0d21577c *data/Mroz87.rda
@@ -30,7 +30,7 @@ e65657036e1460545a2c6a030e46c65a *inst/REFERENCES.bib
 2577918b5630440e304ae9a88141d764 *inst/WORDLIST
 701755ec208052461bcff51c0f70f94a *inst/doc/vignette.R
 c5e330bd15a191c26aa34ee414f4a0ca *inst/doc/vignette.Rmd
-39114f4f379be363fae3a75433631af1 *inst/doc/vignette.html
+5adf70547f66706a6ffd244d1abda87a *inst/doc/vignette.html
 b108027f87fccec7146365d8b2bcf3c5 *man/HCinitial.Rd
 8dcfc25eee131ef2a0ca4715926aaf1a *man/HeckmanBS.Rd
 bc71d2f80b2f4e1add6f8cf6bfa76c37 *man/HeckmanCL.Rd
